@@ -44,6 +44,21 @@ const defaults = {
 	timeout: 5000
 };
 
+/**
+ * An implementation of `querystring.stringify()` from NodeJS
+ * @param {Object} json  The object to serialize into a URL query string
+ * @return {String}      The object as a URL query string, sans '?' prefix
+ */
+const queryStringify = json => {
+	return Object.keys(json)
+		.map(function(key) {
+			return (
+				encodeURIComponent(key) + "=" + encodeURIComponent(json[key])
+			);
+		})
+		.join("&");
+};
+
 // Create a signature for a request
 const getMessageSignature = (path, request, secret, nonce) => {
 	const message = qs.stringify(request);
@@ -58,13 +73,14 @@ const getMessageSignature = (path, request, secret, nonce) => {
 	return hmac_digest;
 };
 
-const getKrakenSignature = async (path, postdata, nonce) => {
-	var sha256obj = new jsSHA("SHA-256", "BYTES");
-	sha256obj.update(nonce + postdata);
-	var hash_digest = sha256obj.getHash("BYTES");
+const getKrakenSignature = async (path, request, secret, nonce) => {
+	const message = queryStringify(request);
+	const sha256obj = new jsSHA("SHA-256", "BYTES");
+	sha256obj.update(nonce + message);
+	const hash_digest = sha256obj.getHash("BYTES");
 
-	var sha512obj = new jsSHA("SHA-512", "BYTES");
-	sha512obj.setHMACKey(api_key_private, "B64");
+	const sha512obj = new jsSHA("SHA-512", "BYTES");
+	sha512obj.setHMACKey(secret, "B64");
 	sha512obj.update(path);
 	sha512obj.update(hash_digest);
 	return sha512obj.getHMAC("B64");
@@ -229,7 +245,7 @@ class KrakenClient {
 			params.otp = this.config.otp;
 		}
 
-		const signature = getMessageSignature(
+		const signature = getKrakenSignature(
 			path,
 			params,
 			this.config.secret,
